@@ -1,0 +1,5 @@
+train: /Users/esbenchristensen/Github/lpr/dataset/images/train
+val: /Users/esbenchristensen/Github/lpr/dataset/images/val
+
+nc: 1 # antal klasser (her kun "licence")
+names: ["licence"]
