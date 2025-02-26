@@ -139,5 +139,5 @@ def detect_and_read(image_path):
 # -----------------------------
 if __name__ == "__main__":
     # Update this path to the image you wish to test.
-    image_path = "/Users/esbenchristensen/Github/lpr/7E4DB52E-B8AA-4FC5-867C-35F814563176_1_105_c.jpeg"
+    image_path = "/Users/esbenchristensen/Github/lpr/Group 9.png"
     detect_and_read(image_path)

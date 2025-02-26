@@ -1,0 +1,2 @@
+Plate: BT29579, Frame: registered_frames/BT29579_1740568744.jpg
+Plate: HF38663, Frame: registered_frames/HF38663_1740568751.jpg
