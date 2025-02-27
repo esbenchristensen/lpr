@@ -48,7 +48,7 @@ def process_frame(image: np.ndarray) -> list:
     """
     Run YOLO detection on the image, then use EasyOCR (with detail=1)
     to extract text from each detected region.
-    Return a list of plates that match the pattern with confidence >= 80%.
+    Return a list of dictionaries with keys "plate" and "box".
     """
     detected_plates = []
     results = model(image)
@@ -63,8 +63,9 @@ def process_frame(image: np.ndarray) -> list:
             text = text.replace(" ", "")
             if re.fullmatch(r'[A-Z]{2}[0-9]{5}', text) and conf_ocr >= 0.8:
                 print(f"OCR detected {text} with confidence {conf_ocr*100:.1f}%")
-                if text not in detected_plates:
-                    detected_plates.append(text)
+                # Ensure the same plate is not added twice.
+                if not any(d['plate'] == text for d in detected_plates):
+                    detected_plates.append({"plate": text, "box": [x1, y1, x2, y2]})
     return detected_plates
 
 @app.websocket("/ws/detect")
@@ -98,9 +99,20 @@ async def websocket_endpoint(websocket: WebSocket):
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             
             # Offload blocking processing to a separate thread.
-            plates = await asyncio.to_thread(process_frame, image)
+            detections = await asyncio.to_thread(process_frame, image)
             
-            if plates:
+            # Draw bounding boxes around detected license plates.
+            for detection in detections:
+                box = detection["box"]
+                plate = detection["plate"]
+                cv2.rectangle(image, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+                cv2.putText(image, plate, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            
+            # --- Show the modified frame in an OpenCV window ---
+            cv2.imshow("Incoming Frame", image)
+            cv2.waitKey(1)
+            
+            if detections:
                 new_plates = []
                 # Check each detected plate against the file.
                 if os.path.exists(REGISTERED_PLATES_FILE):
@@ -108,7 +120,8 @@ async def websocket_endpoint(websocket: WebSocket):
                         file_contents = f.read()
                 else:
                     file_contents = ""
-                for plate in plates:
+                for detection in detections:
+                    plate = detection["plate"]
                     if plate not in file_contents:
                         new_plates.append(plate)
                         # Record the new plate.
@@ -117,11 +130,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         filepath = os.path.join(REGISTERED_FRAMES_DIR, filename)
                         cv2.imwrite(filepath, image)
                         with open(REGISTERED_PLATES_FILE, "a") as f:
-                            f.write(f"Plate: {plate}, Frame: {filepath}\n")
+                            f.write(f"Plate: {plate}, Frame: {filepath} Time: {timestamp}\n")
                 if new_plates:
                     await websocket.send_json({"plates": new_plates})
     except WebSocketDisconnect:
         print("Client disconnected.")
+    finally:
+        # Clean up: destroy OpenCV window when client disconnects.
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
